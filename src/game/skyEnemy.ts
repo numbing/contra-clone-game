@@ -5,22 +5,17 @@ import {
   SKY_ENEMY_MIN_Y,
   SKY_ENEMY_SPAWN_INTERVAL,
   SKY_ENEMY_VARIANTS,
+  type SkyEnemyVariantId,
 } from './constants';
 import type { EnemyShotSpawn } from './enemyProjectile';
-
-type SkyEnemyVariant = keyof typeof SKY_ENEMY_VARIANTS;
 
 function randomRange(min: number, max: number): number {
   return min + Math.random() * (max - min);
 }
 
-function randomVariant(): SkyEnemyVariant {
-  return Math.random() < 0.45 ? 'big' : 'small';
-}
-
 export class SkyEnemy extends Container {
   private readonly body: Graphics;
-  private variant: SkyEnemyVariant = 'small';
+  private variant: SkyEnemyVariantId = 'small';
   private alive = false;
   private health = 1;
   private baseY = SKY_ENEMY_MIN_Y;
@@ -40,7 +35,7 @@ export class SkyEnemy extends Container {
     return SKY_ENEMY_VARIANTS[this.variant];
   }
 
-  reset(x: number, y: number, variant: SkyEnemyVariant): void {
+  reset(x: number, y: number, variant: SkyEnemyVariantId): void {
     this.variant = variant;
     const data = this.data;
 
@@ -159,9 +154,16 @@ export class SkyEnemy extends Container {
   }
 }
 
+const SKY_VARIANT_TABLE: Record<number, SkyEnemyVariantId[]> = {
+  1: ['small', 'small', 'big'],
+  2: ['small', 'big', 'big'],
+  3: ['big', 'big', 'big'],
+};
+
 export class SkyEnemyManager extends Container {
   private readonly enemies: SkyEnemy[] = [];
   private spawnTimer = SKY_ENEMY_SPAWN_INTERVAL;
+  private difficultyTier = 1;
 
   update(
     deltaSeconds: number,
@@ -191,6 +193,10 @@ export class SkyEnemyManager extends Container {
     }
   }
 
+  setDifficulty(tier: number): void {
+    this.difficultyTier = Math.min(3, Math.max(1, Math.round(tier)));
+  }
+
   reset(): void {
     this.spawnTimer = SKY_ENEMY_SPAWN_INTERVAL;
     for (const enemy of this.enemies) {
@@ -200,7 +206,7 @@ export class SkyEnemyManager extends Container {
 
   private spawn(): void {
     const enemy = this.obtain();
-    const variant = randomVariant();
+    const variant = this.pickVariant();
     const y = randomRange(SKY_ENEMY_MIN_Y, SKY_ENEMY_MAX_Y);
     enemy.reset(GAME_WIDTH + 64, y, variant);
   }
@@ -216,5 +222,10 @@ export class SkyEnemyManager extends Container {
     this.enemies.push(created);
     this.addChild(created);
     return created;
+  }
+
+  private pickVariant(): SkyEnemyVariantId {
+    const pool = SKY_VARIANT_TABLE[this.difficultyTier] ?? SKY_VARIANT_TABLE[1];
+    return pool[Math.floor(Math.random() * pool.length)];
   }
 }

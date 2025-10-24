@@ -9,6 +9,7 @@ export interface EnemyShotSpawn {
   damage: number;
   radius: number;
   color: number;
+  gravity?: number;
 }
 
 class EnemyShot extends Container {
@@ -18,6 +19,7 @@ class EnemyShot extends Container {
   private vy = 0;
   private lifetime = 0;
   private damage = 1;
+  private gravity = 0;
 
   constructor() {
     super();
@@ -32,6 +34,7 @@ class EnemyShot extends Container {
     this.vy = spawn.vy;
     this.lifetime = spawn.lifetime;
     this.damage = spawn.damage;
+    this.gravity = spawn.gravity ?? 0;
 
     this.body
       .clear()
@@ -52,6 +55,7 @@ class EnemyShot extends Container {
     }
 
     this.position.x += this.vx * deltaSeconds;
+    this.vy += this.gravity * deltaSeconds;
     this.position.y += this.vy * deltaSeconds;
     this.lifetime -= deltaSeconds;
 
@@ -65,6 +69,7 @@ class EnemyShot extends Container {
     this.lifetime = 0;
     this.vx = 0;
     this.vy = 0;
+    this.gravity = 0;
   }
 
   getHitBox(): { x: number; y: number; width: number; height: number } {

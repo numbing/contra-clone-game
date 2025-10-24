@@ -1,45 +1,127 @@
 import { Container, Graphics } from 'pixi.js';
-import { ENEMY_BASE_HEALTH, ENEMY_SPEED, ENEMY_SPAWN_INTERVAL, FLOOR_Y, GAME_WIDTH } from './constants';
+import {
+  FLOOR_Y,
+  GAME_WIDTH,
+  GROUND_ENEMY_SPAWN_INTERVAL,
+  GROUND_ENEMY_VARIANTS,
+  type GroundEnemyVariantId,
+} from './constants';
+import type { EnemyShotSpawn } from './enemyProjectile';
 
 export class Enemy extends Container {
   private readonly body: Graphics;
-  private velocityX = -ENEMY_SPEED;
-  private alive = true;
-  private health = ENEMY_BASE_HEALTH;
-  private maxHealth = ENEMY_BASE_HEALTH;
+  private variantId: GroundEnemyVariantId = 'scout';
+  private alive = false;
+  private health = 1;
+  private fireCooldown = 0;
+  private dashTimer = 0;
+  private dashDir = 1;
   private id = 0;
   private static idCounter = 1;
 
   constructor() {
     super();
-
-    this.body = new Graphics()
-      .beginFill(0xe14d65)
-      .drawRect(-14, -24, 28, 32)
-      .endFill();
-
+    this.body = new Graphics();
     this.addChild(this.body);
   }
 
-  reset(x: number, y: number): void {
-    this.position.set(x, y);
-    this.velocityX = -ENEMY_SPEED;
-    this.alive = true;
-    this.visible = true;
-    this.health = this.maxHealth;
-    this.id = Enemy.idCounter++;
-    this.body.alpha = 1;
+  private get data() {
+    return GROUND_ENEMY_VARIANTS[this.variantId];
   }
 
-  update(deltaSeconds: number): void {
+  reset(x: number, y: number, variant: GroundEnemyVariantId): void {
+    this.variantId = variant;
+    const data = this.data;
+
+    this.position.set(x, y);
+    this.alive = true;
+    this.visible = true;
+    this.health = data.health;
+    this.body.alpha = 1;
+    this.fireCooldown = data.fireInterval > 0 ? data.fireInterval * (0.5 + Math.random()) : 0;
+    this.dashTimer = 1.2 + Math.random() * 1.4;
+    this.dashDir = Math.random() < 0.5 ? 1 : -1;
+    this.id = Enemy.idCounter++;
+
+    const width = 28;
+    const height = 34;
+
+    this.body
+      .clear()
+      .beginFill(data.color)
+      .drawRect(-width / 2, -height, width, height)
+      .endFill()
+      .beginFill(data.stripe)
+      .drawRect(-width / 2, -height / 2, width, 6)
+      .endFill();
+  }
+
+  update(
+    deltaSeconds: number,
+    playerX: number,
+    playerY: number,
+    fire: (spawn: EnemyShotSpawn) => void,
+  ): void {
     if (!this.alive) {
       return;
     }
 
-    this.position.x += this.velocityX * deltaSeconds;
-    if (this.position.x < -64) {
-      this.alive = false;
-      this.visible = false;
+    const data = this.data;
+    this.position.x -= data.speed * deltaSeconds;
+
+    // Dashing scouts zig-zag slightly to feel lively.
+    if (data.ability === 'dash') {
+      this.dashTimer -= deltaSeconds;
+      if (this.dashTimer <= 0) {
+        this.dashTimer = 0.6 + Math.random();
+        this.dashDir *= -1;
+      }
+      this.position.y = FLOOR_Y - 16 + Math.sin(this.dashTimer * 6) * 6 * this.dashDir;
+    } else {
+      this.position.y = FLOOR_Y - 16;
+    }
+
+    if (this.position.x < -96) {
+      this.kill();
+      return;
+    }
+
+    // Offensive abilities.
+    if (data.ability === 'shoot' || data.ability === 'lob') {
+      this.fireCooldown -= deltaSeconds;
+      if (this.fireCooldown <= 0) {
+        const targetX = playerX;
+        const targetY = playerY;
+        const dx = targetX - this.x;
+        const dy = targetY - this.y;
+        let vx = -data.bulletSpeed;
+        let vy = 0;
+
+        if (data.ability === 'shoot' && Math.abs(dy) < 100) {
+          const distance = Math.hypot(dx, dy);
+          if (distance > 32) {
+            vx = (dx / distance) * data.bulletSpeed;
+            vy = (dy / distance) * data.bulletSpeed;
+          }
+        } else if (data.ability === 'lob') {
+          vx = -data.bulletSpeed;
+          vy = -data.bulletSpeed * 0.6;
+        }
+
+        fire({
+          x: this.x - 14,
+          y: this.y - 18,
+          vx,
+          vy,
+          lifetime: 2.8,
+          damage: 1,
+          radius: data.ability === 'lob' ? 6 : 4,
+          color: data.stripe,
+          gravity: data.ability === 'lob' ? 480 : 0,
+        });
+
+        this.fireCooldown = data.fireInterval * (0.7 + Math.random() * 0.6);
+      }
     }
   }
 
@@ -53,16 +135,18 @@ export class Enemy extends Container {
       return false;
     }
 
-    this.health -= amount;
+    const data = this.data;
+    const finalAmount = data.ability === 'shield' ? Math.max(1, amount - 1) : amount;
+    this.health -= finalAmount;
     if (this.health <= 0) {
       this.kill();
       return true;
     }
 
-    this.body.alpha = 0.6;
+    this.body.alpha = 0.5;
     setTimeout(() => {
       this.body.alpha = 1;
-    }, 80);
+    }, 70);
 
     return false;
   }
@@ -77,33 +161,56 @@ export class Enemy extends Container {
 
   getHitBox(): { x: number; y: number; width: number; height: number } {
     return {
-      x: this.x - 14,
-      y: this.y - 24,
-      width: 28,
-      height: 32,
+      x: this.x - 16,
+      y: this.y - 34,
+      width: 32,
+      height: 34,
     };
   }
 }
 
+const DIFFICULTY_TABLE: Record<number, GroundEnemyVariantId[]> = {
+  1: ['scout', 'gunner'],
+  2: ['scout', 'gunner', 'grenadier'],
+  3: ['gunner', 'grenadier', 'brute'],
+};
+
 export class EnemyManager extends Container {
   private readonly enemies: Enemy[] = [];
   private spawnTimer = 0;
+  private active = true;
+  private difficultyTier = 1;
 
   constructor() {
     super();
   }
 
-  update(deltaSeconds: number): void {
-    this.spawnTimer -= deltaSeconds;
+  setActive(active: boolean): void {
+    this.active = active;
+  }
 
-    if (this.spawnTimer <= 0) {
-      this.spawn();
-      this.spawnTimer = ENEMY_SPAWN_INTERVAL;
+  setDifficulty(tier: number): void {
+    this.difficultyTier = Math.min(3, Math.max(1, Math.round(tier)));
+  }
+
+  update(
+    deltaSeconds: number,
+    playerX: number,
+    playerY: number,
+    fire: (spawn: EnemyShotSpawn) => void,
+  ): void {
+    if (this.active) {
+      this.spawnTimer -= deltaSeconds;
+
+      if (this.spawnTimer <= 0) {
+        this.spawn();
+        this.spawnTimer = GROUND_ENEMY_SPAWN_INTERVAL * (0.7 + Math.random() * 0.6);
+      }
     }
 
     for (const enemy of this.enemies) {
       if (enemy.isAlive()) {
-        enemy.update(deltaSeconds);
+        enemy.update(deltaSeconds, playerX, playerY, fire);
       }
     }
   }
@@ -117,15 +224,17 @@ export class EnemyManager extends Container {
   }
 
   reset(): void {
-    this.spawnTimer = ENEMY_SPAWN_INTERVAL;
+    this.spawnTimer = 0.6;
     for (const enemy of this.enemies) {
       enemy.kill();
     }
   }
 
   private spawn(): void {
+    const pool = DIFFICULTY_TABLE[this.difficultyTier] ?? DIFFICULTY_TABLE[1];
+    const variant = pool[Math.floor(Math.random() * pool.length)];
     const enemy = this.obtain();
-    enemy.reset(GAME_WIDTH + 32, FLOOR_Y - 16);
+    enemy.reset(GAME_WIDTH + 32, FLOOR_Y - 16, variant);
   }
 
   private obtain(): Enemy {

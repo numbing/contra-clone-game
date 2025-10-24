@@ -2,6 +2,7 @@ import { Container, Graphics } from 'pixi.js';
 import { FLOOR_Y, GAME_WIDTH, GRAVITY, PLAYER_JUMP, PLAYER_SPEED } from './constants';
 import { BulletManager } from './bullet';
 import { Input } from './input';
+import { CHARACTERS, type CharacterDefinition } from './characters';
 import type { WeaponType } from './weapons';
 import { getWeaponDefinition } from './weapons';
 
@@ -15,6 +16,12 @@ export class Player extends Container {
   private weaponTimer = 0;
   private weaponType: WeaponType = 'rifle';
   private isCrouching = false;
+  private baseWeaponType: WeaponType = 'rifle';
+  private speedMultiplier = 1;
+  private jumpMultiplier = 1;
+  private bodyColor = 0x4dd5ff;
+  private accentColor = 0x1d5d82;
+  private character: CharacterDefinition = CHARACTERS[0];
   private readonly input: Input;
   private readonly bullets: BulletManager;
 
@@ -26,7 +33,7 @@ export class Player extends Container {
     this.body = new Graphics();
     this.addChild(this.body);
     this.position.set(120, FLOOR_Y);
-    this.updatePose();
+    this.applyCharacter(CHARACTERS[0]);
   }
 
   update(deltaSeconds: number): void {
@@ -41,7 +48,7 @@ export class Player extends Container {
     this.velocityX = 0;
     this.velocityY = 0;
     this.onGround = true;
-    this.weaponType = 'rifle';
+    this.weaponType = this.baseWeaponType;
     this.weaponTimer = 0;
     this.cooldownTimer = 0;
     if (this.isCrouching) {
@@ -110,7 +117,8 @@ export class Player extends Container {
       }
     }
 
-    const speed = this.isCrouching ? PLAYER_SPEED * 0.4 : PLAYER_SPEED;
+    const baseSpeed = PLAYER_SPEED * this.speedMultiplier;
+    const speed = this.isCrouching ? baseSpeed * 0.4 : baseSpeed;
     this.velocityX = direction * speed;
     this.position.x += this.velocityX * deltaSeconds;
     this.position.x = Math.max(32, Math.min(GAME_WIDTH - 32, this.position.x));
@@ -122,7 +130,7 @@ export class Player extends Container {
 
   private handleJumping(deltaSeconds: number): void {
     if (this.input.isPressed(' ') && this.onGround && !this.isCrouching) {
-      this.velocityY = -PLAYER_JUMP;
+      this.velocityY = -PLAYER_JUMP * this.jumpMultiplier;
       this.onGround = false;
     }
 
@@ -190,7 +198,7 @@ export class Player extends Container {
     const direction = normX >= 0 ? 1 : -1;
     const angle = Math.asin(-normY);
 
-    const muzzleDistance = this.isCrouching ? 16 : 24;
+    const muzzleDistance = (this.isCrouching ? 16 : 24) * this.speedMultiplier;
     const baseHeight = this.isCrouching ? 16 : 24;
     const origin = {
       x: this.position.x + direction * Math.cos(angle) * muzzleDistance,
@@ -210,8 +218,8 @@ export class Player extends Container {
     }
 
     this.weaponTimer -= deltaSeconds;
-    if (this.weaponTimer <= 0 && this.weaponType !== 'rifle') {
-      this.weaponType = 'rifle';
+    if (this.weaponTimer <= 0 && this.weaponType !== this.baseWeaponType) {
+      this.weaponType = this.baseWeaponType;
       this.weaponTimer = 0;
     }
   }
@@ -220,20 +228,40 @@ export class Player extends Container {
     this.body.clear();
     if (this.isCrouching) {
       this.body
-        .beginFill(0x319bd4)
+        .beginFill(this.bodyColor)
         .drawRect(-16, -32, 32, 32)
         .endFill()
-        .beginFill(0x1d5d82)
+        .beginFill(this.accentColor)
         .drawRect(-16, -18, 32, 6)
         .endFill();
     } else {
       this.body
-        .beginFill(0x4dd5ff)
+        .beginFill(this.bodyColor)
         .drawRect(-16, -48, 32, 48)
         .endFill()
-        .beginFill(0x1d5d82)
+        .beginFill(this.accentColor)
         .drawRect(-16, -24, 32, 6)
         .endFill();
     }
+  }
+
+  applyCharacter(character: CharacterDefinition): void {
+    this.character = character;
+    this.bodyColor = character.bodyColor;
+    this.accentColor = character.accentColor;
+    this.baseWeaponType = character.baseWeapon;
+    this.weaponType = character.baseWeapon;
+    this.weaponTimer = 0;
+    this.speedMultiplier = character.speedMultiplier;
+    this.jumpMultiplier = character.jumpMultiplier;
+    this.updatePose();
+  }
+
+  getCharacter(): CharacterDefinition {
+    return this.character;
+  }
+
+  getBaseWeapon(): WeaponType {
+    return this.baseWeaponType;
   }
 }

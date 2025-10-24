@@ -1,6 +1,6 @@
 import type { BulletSpawn } from './bullet';
 
-export type WeaponType = 'rifle' | 'spread' | 'laser' | 'rapid';
+export type WeaponType = 'rifle' | 'spread' | 'laser' | 'rapid' | 'flame';
 
 interface WeaponDefinition {
   label: string;
@@ -111,6 +111,26 @@ const WEAPONS: Record<WeaponType, WeaponDefinition> = {
       ];
     },
   },
+  flame: {
+    label: 'Flame',
+    cooldown: 0.22,
+    duration: 16,
+    pickupColor: 0xff6f6f,
+    pattern(origin, direction, aimAngle) {
+      const offsets = [-12, 0, 12];
+      return offsets.map((offset, index) =>
+        makeBullet(origin, direction, aimAngle + offset * DEG_TO_RAD, {
+          speed: 520 - index * 50,
+          color: 0xff6f6f,
+          width: 12,
+          height: 6,
+          lifetime: 1.4,
+          damage: 1,
+          pierce: false,
+        }),
+      );
+    },
+  },
 };
 
 export function getWeaponDefinition(type: WeaponType): WeaponDefinition {
@@ -134,7 +154,7 @@ export function getWeaponPickupColor(type: WeaponType): number {
 }
 
 export function getRandomWeapon(): WeaponType {
-  const pool: WeaponType[] = ['spread', 'rapid', 'laser'];
+  const pool: WeaponType[] = ['spread', 'rapid', 'laser', 'flame'];
   const index = Math.floor(Math.random() * pool.length);
   return pool[index];
 }
