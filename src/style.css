@@ -1,0 +1,26 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at top, #1d2b46 0%, #0e1624 70%);
+  font-family: Arial, sans-serif;
+  color: white;
+}
+
+#app {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+canvas {
+  image-rendering: pixelated;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.45);
+  border-radius: 8px;
+}
