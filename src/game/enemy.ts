@@ -1,4 +1,4 @@
-import { Container, Graphics } from 'pixi.js';
+import { Assets, Container, Sprite, Texture } from 'pixi.js';
 import {
   FLOOR_Y,
   GAME_WIDTH,
@@ -7,9 +7,10 @@ import {
   type GroundEnemyVariantId,
 } from './constants';
 import type { EnemyShotSpawn } from './enemyProjectile';
+import type { WeaponType } from './weapons';
 
 export class Enemy extends Container {
-  private readonly body: Graphics;
+  private readonly sprite: Sprite;
   private variantId: GroundEnemyVariantId = 'scout';
   private alive = false;
   private health = 1;
@@ -18,11 +19,13 @@ export class Enemy extends Container {
   private dashDir = 1;
   private id = 0;
   private static idCounter = 1;
+  private dropWeapon: WeaponType | null = 'rifle';
 
   constructor() {
     super();
-    this.body = new Graphics();
-    this.addChild(this.body);
+    this.sprite = new Sprite(Texture.WHITE);
+    this.sprite.anchor.set(0.5, 1);
+    this.addChild(this.sprite);
   }
 
   private get data() {
@@ -37,23 +40,19 @@ export class Enemy extends Container {
     this.alive = true;
     this.visible = true;
     this.health = data.health;
-    this.body.alpha = 1;
+    this.sprite.alpha = 1;
     this.fireCooldown = data.fireInterval > 0 ? data.fireInterval * (0.5 + Math.random()) : 0;
     this.dashTimer = 1.2 + Math.random() * 1.4;
     this.dashDir = Math.random() < 0.5 ? 1 : -1;
     this.id = Enemy.idCounter++;
+    this.dropWeapon = data.dropWeapon ?? null;
 
-    const width = 28;
-    const height = 34;
-
-    this.body
-      .clear()
-      .beginFill(data.color)
-      .drawRect(-width / 2, -height, width, height)
-      .endFill()
-      .beginFill(data.stripe)
-      .drawRect(-width / 2, -height / 2, width, 6)
-      .endFill();
+    const tex = Assets.get<Texture>(`enemy-${variant}`);
+    if (tex) {
+      this.sprite.texture = tex;
+      this.sprite.width = tex.width;
+      this.sprite.height = tex.height;
+    }
   }
 
   update(
@@ -143,9 +142,9 @@ export class Enemy extends Container {
       return true;
     }
 
-    this.body.alpha = 0.5;
+    this.sprite.alpha = 0.5;
     setTimeout(() => {
-      this.body.alpha = 1;
+      this.sprite.alpha = 1;
     }, 70);
 
     return false;
@@ -160,12 +159,17 @@ export class Enemy extends Container {
   }
 
   getHitBox(): { x: number; y: number; width: number; height: number } {
+    const bounds = this.sprite.getLocalBounds();
     return {
-      x: this.x - 16,
-      y: this.y - 34,
-      width: 32,
-      height: 34,
+      x: this.x - bounds.width / 2,
+      y: this.y - bounds.height,
+      width: bounds.width,
+      height: bounds.height,
     };
+  }
+
+  getDropWeapon(): WeaponType | null {
+    return this.dropWeapon;
   }
 }
 

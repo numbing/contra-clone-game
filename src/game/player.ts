@@ -1,4 +1,4 @@
-import { Container, Graphics } from 'pixi.js';
+import { Assets, Container, Sprite, Texture } from 'pixi.js';
 import { FLOOR_Y, GAME_WIDTH, GRAVITY, PLAYER_JUMP, PLAYER_SPEED } from './constants';
 import { BulletManager } from './bullet';
 import { Input } from './input';
@@ -7,7 +7,8 @@ import type { WeaponType } from './weapons';
 import { getWeaponDefinition } from './weapons';
 
 export class Player extends Container {
-  private readonly body: Graphics;
+  private readonly sprite: Sprite;
+  private readonly weaponOverlay: Sprite;
   private velocityX = 0;
   private velocityY = 0;
   private onGround = true;
@@ -19,19 +20,26 @@ export class Player extends Container {
   private baseWeaponType: WeaponType = 'rifle';
   private speedMultiplier = 1;
   private jumpMultiplier = 1;
-  private bodyColor = 0x4dd5ff;
-  private accentColor = 0x1d5d82;
   private character: CharacterDefinition = CHARACTERS[0];
   private readonly input: Input;
   private readonly bullets: BulletManager;
+  private readonly weaponTextures: Partial<Record<WeaponType, Texture>> = {};
 
   constructor(input: Input, bullets: BulletManager) {
     super();
     this.input = input;
     this.bullets = bullets;
 
-    this.body = new Graphics();
-    this.addChild(this.body);
+    this.sprite = new Sprite(Texture.WHITE);
+    this.sprite.anchor.set(0.5, 1);
+    this.sprite.scale.set(1);
+    this.addChild(this.sprite);
+
+    this.weaponOverlay = new Sprite();
+    this.weaponOverlay.anchor.set(0.1, 0.5);
+    this.weaponOverlay.position.set(20, -32);
+    this.addChild(this.weaponOverlay);
+
     this.position.set(120, FLOOR_Y);
     this.applyCharacter(CHARACTERS[0]);
   }
@@ -51,10 +59,8 @@ export class Player extends Container {
     this.weaponType = this.baseWeaponType;
     this.weaponTimer = 0;
     this.cooldownTimer = 0;
-    if (this.isCrouching) {
-      this.isCrouching = false;
-      this.updatePose();
-    }
+    this.isCrouching = false;
+    this.updateStance();
   }
 
   collectWeapon(type: WeaponType): void {
@@ -62,6 +68,7 @@ export class Player extends Container {
     this.weaponType = type;
     this.weaponTimer = definition.duration ?? 0;
     this.cooldownTimer = 0;
+    this.updateWeaponOverlay();
   }
 
   getWeaponType(): WeaponType {
@@ -84,9 +91,9 @@ export class Player extends Container {
   }
 
   takeHit(): void {
-    this.body.tint = 0xfff380;
+    this.sprite.tint = 0xfff380;
     setTimeout(() => {
-      this.body.tint = 0xffffff;
+      this.sprite.tint = 0xffffff;
     }, 120);
   }
 
@@ -102,10 +109,10 @@ export class Player extends Container {
 
     if (!this.onGround && this.isCrouching) {
       this.isCrouching = false;
-      this.updatePose();
+      this.updateStance();
     } else if (crouchPressed !== this.isCrouching) {
       this.isCrouching = crouchPressed;
-      this.updatePose();
+      this.updateStance();
     }
 
     let direction = 0;
@@ -125,6 +132,8 @@ export class Player extends Container {
 
     if (direction !== 0) {
       this.facing = direction;
+      this.weaponOverlay.scale.x = this.facing >= 0 ? 1 : -1;
+      this.weaponOverlay.position.x = this.facing >= 0 ? 20 : -20;
     }
   }
 
@@ -198,8 +207,9 @@ export class Player extends Container {
     const direction = normX >= 0 ? 1 : -1;
     const angle = Math.asin(-normY);
 
-    const muzzleDistance = (this.isCrouching ? 16 : 24) * this.speedMultiplier;
-    const baseHeight = this.isCrouching ? 16 : 24;
+    const baseWidth = this.sprite.width * 0.35;
+    const muzzleDistance = (this.isCrouching ? 14 : 22) * this.speedMultiplier + baseWidth * 0.3;
+    const baseHeight = this.isCrouching ? this.sprite.height * 0.35 : this.sprite.height * 0.45;
     const origin = {
       x: this.position.x + direction * Math.cos(angle) * muzzleDistance,
       y: this.position.y - baseHeight - Math.sin(angle) * muzzleDistance,
@@ -221,40 +231,20 @@ export class Player extends Container {
     if (this.weaponTimer <= 0 && this.weaponType !== this.baseWeaponType) {
       this.weaponType = this.baseWeaponType;
       this.weaponTimer = 0;
-    }
-  }
-
-  private updatePose(): void {
-    this.body.clear();
-    if (this.isCrouching) {
-      this.body
-        .beginFill(this.bodyColor)
-        .drawRect(-16, -32, 32, 32)
-        .endFill()
-        .beginFill(this.accentColor)
-        .drawRect(-16, -18, 32, 6)
-        .endFill();
-    } else {
-      this.body
-        .beginFill(this.bodyColor)
-        .drawRect(-16, -48, 32, 48)
-        .endFill()
-        .beginFill(this.accentColor)
-        .drawRect(-16, -24, 32, 6)
-        .endFill();
+      this.updateWeaponOverlay();
     }
   }
 
   applyCharacter(character: CharacterDefinition): void {
     this.character = character;
-    this.bodyColor = character.bodyColor;
-    this.accentColor = character.accentColor;
     this.baseWeaponType = character.baseWeapon;
     this.weaponType = character.baseWeapon;
     this.weaponTimer = 0;
     this.speedMultiplier = character.speedMultiplier;
     this.jumpMultiplier = character.jumpMultiplier;
-    this.updatePose();
+    this.updateSpriteTexture(character);
+    this.updateStance();
+    this.updateWeaponOverlay();
   }
 
   getCharacter(): CharacterDefinition {
@@ -263,5 +253,46 @@ export class Player extends Container {
 
   getBaseWeapon(): WeaponType {
     return this.baseWeaponType;
+  }
+
+  private updateSpriteTexture(character: CharacterDefinition): void {
+    const texture = Assets.get<Texture>(`character-${character.id}`);
+    if (texture) {
+      this.sprite.texture = texture;
+      this.sprite.width = texture.width;
+      this.sprite.height = texture.height;
+    }
+  }
+
+  private updateWeaponOverlay(): void {
+    const existing = this.weaponTextures[this.weaponType];
+    if (existing) {
+      this.weaponOverlay.texture = existing;
+    } else {
+      const tex = this.getWeaponTexture(this.weaponType);
+      this.weaponTextures[this.weaponType] = tex;
+      this.weaponOverlay.texture = tex;
+    }
+    this.weaponOverlay.visible = true;
+    this.weaponOverlay.scale.x = this.facing >= 0 ? 1 : -1;
+    this.weaponOverlay.position.x = this.facing >= 0 ? 20 : -20;
+  }
+
+  private getWeaponTexture(type: WeaponType): Texture {
+    if (!this.weaponTextures[type]) {
+      const texture = Assets.get<Texture>(`weapon-${type}`);
+      this.weaponTextures[type] = texture ?? Texture.WHITE;
+    }
+    return this.weaponTextures[type] ?? Texture.WHITE;
+  }
+
+  private updateStance(): void {
+    if (this.isCrouching) {
+      this.sprite.scale.y = 0.82;
+      this.weaponOverlay.position.y = -20;
+    } else {
+      this.sprite.scale.y = 1;
+      this.weaponOverlay.position.y = -32;
+    }
   }
 }

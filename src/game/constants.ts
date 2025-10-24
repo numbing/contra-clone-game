@@ -1,3 +1,5 @@
+import type { WeaponType } from './weapons';
+
 export const GAME_WIDTH = 960;
 export const GAME_HEIGHT = 540;
 export const FLOOR_Y = GAME_HEIGHT - 72;
@@ -55,6 +57,7 @@ export const SKY_ENEMY_VARIANTS = {
     shotRadius: 4,
     width: 36,
     height: 20,
+    weapon: 'rapid' as WeaponType,
   },
   big: {
     speed: 150,
@@ -69,6 +72,7 @@ export const SKY_ENEMY_VARIANTS = {
     shotRadius: 6,
     width: 44,
     height: 26,
+    weapon: 'laser' as WeaponType,
   },
 } as const;
 
@@ -83,6 +87,7 @@ export const GROUND_ENEMY_VARIANTS = {
     ability: 'dash',
     fireInterval: 0,
     bulletSpeed: 0,
+    dropWeapon: 'rapid' as WeaponType,
   },
   gunner: {
     speed: 120,
@@ -92,6 +97,7 @@ export const GROUND_ENEMY_VARIANTS = {
     ability: 'shoot',
     fireInterval: 2.8,
     bulletSpeed: 280,
+    dropWeapon: 'rifle' as WeaponType,
   },
   grenadier: {
     speed: 90,
@@ -101,6 +107,7 @@ export const GROUND_ENEMY_VARIANTS = {
     ability: 'lob',
     fireInterval: 3.6,
     bulletSpeed: 200,
+    dropWeapon: 'flame' as WeaponType,
   },
   brute: {
     speed: 70,
@@ -110,6 +117,7 @@ export const GROUND_ENEMY_VARIANTS = {
     ability: 'shield',
     fireInterval: 0,
     bulletSpeed: 0,
+    dropWeapon: null,
   },
 } as const;
 

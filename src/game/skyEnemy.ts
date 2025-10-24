@@ -1,4 +1,4 @@
-import { Container, Graphics } from 'pixi.js';
+import { Assets, Container, Sprite, Texture } from 'pixi.js';
 import {
   GAME_WIDTH,
   SKY_ENEMY_MAX_Y,
@@ -7,6 +7,7 @@ import {
   SKY_ENEMY_VARIANTS,
   type SkyEnemyVariantId,
 } from './constants';
+import type { WeaponType } from './weapons';
 import type { EnemyShotSpawn } from './enemyProjectile';
 
 function randomRange(min: number, max: number): number {
@@ -14,7 +15,7 @@ function randomRange(min: number, max: number): number {
 }
 
 export class SkyEnemy extends Container {
-  private readonly body: Graphics;
+  private readonly sprite: Sprite;
   private variant: SkyEnemyVariantId = 'small';
   private alive = false;
   private health = 1;
@@ -23,11 +24,13 @@ export class SkyEnemy extends Container {
   private fireCooldown = 0;
   private id = 0;
   private static idCounter = 10_000;
+  private weaponType: WeaponType = 'rapid';
 
   constructor() {
     super();
-    this.body = new Graphics();
-    this.addChild(this.body);
+    this.sprite = new Sprite(Texture.WHITE);
+    this.sprite.anchor.set(0.5, 0.5);
+    this.addChild(this.sprite);
     this.visible = false;
   }
 
@@ -47,20 +50,15 @@ export class SkyEnemy extends Container {
     this.id = SkyEnemy.idCounter++;
     this.alive = true;
     this.visible = true;
+    this.weaponType = data.weapon;
 
-    this.body.alpha = 1;
-    this.body
-      .clear()
-      .beginFill(data.bodyColor)
-      .drawPolygon([
-        -data.width / 2, -data.height / 2,
-        data.width / 2, 0,
-        -data.width / 2, data.height / 2,
-      ])
-      .endFill()
-      .beginFill(data.accentColor)
-      .drawRect(-data.width / 2 + 6, -4, data.width / 2, 8)
-      .endFill();
+    this.sprite.alpha = 1;
+    const tex = Assets.get<Texture>(`sky-${variant}`);
+    if (tex) {
+      this.sprite.texture = tex;
+      this.sprite.width = tex.width;
+      this.sprite.height = tex.height;
+    }
   }
 
   update(
@@ -127,9 +125,9 @@ export class SkyEnemy extends Container {
       return true;
     }
 
-    this.body.alpha = 0.6;
+    this.sprite.alpha = 0.6;
     setTimeout(() => {
-      this.body.alpha = 1;
+      this.sprite.alpha = 1;
     }, 80);
 
     return false;
@@ -143,13 +141,17 @@ export class SkyEnemy extends Container {
     return this.id;
   }
 
+  getWeaponType(): WeaponType {
+    return this.weaponType;
+  }
+
   getHitBox(): { x: number; y: number; width: number; height: number } {
-    const data = this.data;
+    const bounds = this.sprite.getLocalBounds();
     return {
-      x: this.x - data.width / 2,
-      y: this.y - data.height / 2,
-      width: data.width,
-      height: data.height,
+      x: this.x - bounds.width / 2,
+      y: this.y - bounds.height / 2,
+      width: bounds.width,
+      height: bounds.height,
     };
   }
 }

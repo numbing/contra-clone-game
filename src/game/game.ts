@@ -1,4 +1,4 @@
-import { Application, Container, Graphics, Text } from 'pixi.js';
+import { Application, Assets, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 import { BulletManager } from './bullet';
 import {
   BACKGROUND_SWITCH_TIME,
@@ -18,6 +18,7 @@ import { SkyEnemyManager } from './skyEnemy';
 import { CHARACTERS, type CharacterDefinition } from './characters';
 import { Boss } from './boss';
 import { MusicSystem } from './music';
+import { ExplosionManager } from './effects';
 
 const GAME_STATE = {
   CharacterSelect: 'character-select',
@@ -30,6 +31,40 @@ type GameState = (typeof GAME_STATE)[keyof typeof GAME_STATE];
 
 const BOSS_TRIGGER_TIME = 72;
 
+const ASSET_MANIFEST = {
+  bundles: [
+    {
+      name: 'core',
+      assets: [
+        { alias: 'character-atlas', src: 'assets/characters/atlas.png' },
+        { alias: 'character-nova', src: 'assets/characters/nova.png' },
+        { alias: 'character-k9', src: 'assets/characters/k9.png' },
+        { alias: 'character-astra', src: 'assets/characters/astra.png' },
+        { alias: 'enemy-scout', src: 'assets/enemies/scout.png' },
+        { alias: 'enemy-gunner', src: 'assets/enemies/gunner.png' },
+        { alias: 'enemy-grenadier', src: 'assets/enemies/grenadier.png' },
+        { alias: 'enemy-brute', src: 'assets/enemies/brute.png' },
+        { alias: 'sky-small', src: 'assets/sky/small.png' },
+        { alias: 'sky-big', src: 'assets/sky/big.png' },
+        { alias: 'boss-fortress', src: 'assets/boss/fortress_core.png' },
+        { alias: 'weapon-rifle', src: 'assets/weapons/rifle.png' },
+        { alias: 'weapon-rapid', src: 'assets/weapons/rapid.png' },
+        { alias: 'weapon-spread', src: 'assets/weapons/spread.png' },
+        { alias: 'weapon-laser', src: 'assets/weapons/laser.png' },
+        { alias: 'weapon-flame', src: 'assets/weapons/flame.png' },
+        { alias: 'weapon-goliath', src: 'assets/weapons/goliath.png' },
+        { alias: 'weapon-aurora', src: 'assets/weapons/aurora.png' },
+        { alias: 'weapon-howler', src: 'assets/weapons/howler.png' },
+        { alias: 'weapon-ion', src: 'assets/weapons/ion.png' },
+        { alias: 'explosion-0', src: 'assets/effects/explosion_0.png' },
+        { alias: 'explosion-1', src: 'assets/effects/explosion_1.png' },
+        { alias: 'explosion-2', src: 'assets/effects/explosion_2.png' },
+        { alias: 'explosion-3', src: 'assets/effects/explosion_3.png' },
+      ],
+    },
+  ],
+};
+
 export class Game {
   private readonly app: Application;
   private readonly stage: Container;
@@ -40,6 +75,7 @@ export class Game {
   private readonly skyEnemies: SkyEnemyManager;
   private readonly pickups: PickupManager;
   private readonly enemyShots: EnemyProjectileManager;
+  private readonly explosions: ExplosionManager;
   private readonly player: Player;
   private readonly boss: Boss;
   private readonly hud: Text;
@@ -73,6 +109,13 @@ export class Game {
     this.skyEnemies = new SkyEnemyManager();
     this.pickups = new PickupManager();
     this.enemyShots = new EnemyProjectileManager();
+    const explosionTextures = [
+      Assets.get<Texture>('explosion-0'),
+      Assets.get<Texture>('explosion-1'),
+      Assets.get<Texture>('explosion-2'),
+      Assets.get<Texture>('explosion-3'),
+    ].filter(Boolean) as Texture[];
+    this.explosions = new ExplosionManager(explosionTextures);
     this.player = new Player(this.input, this.bullets);
     this.boss = new Boss();
 
@@ -134,6 +177,7 @@ export class Game {
       this.skyEnemies,
       this.pickups,
       this.enemyShots,
+      this.explosions,
       this.player,
       this.boss,
       this.bullets,
@@ -155,6 +199,9 @@ export class Game {
 
   static async start(root: HTMLElement): Promise<Game> {
     const app = new Application();
+
+    await Assets.init({ manifest: ASSET_MANIFEST });
+    await Assets.loadBundle('core');
 
     await app.init({
       background: '#060914',
@@ -228,6 +275,16 @@ export class Game {
       desc.anchor.set(0.5, 0);
       desc.position.set(0, 30);
       card.addChild(desc);
+
+      const portraitTexture = Assets.get<Texture>(`character-${character.id}`);
+      if (portraitTexture) {
+        const portrait = new Sprite(portraitTexture);
+        portrait.anchor.set(0.5, 1);
+        const scale = 90 / portraitTexture.height;
+        portrait.scale.set(scale * 0.85);
+        portrait.position.set(0, 16);
+        card.addChild(portrait);
+      }
 
       card.position.set(160 + index * 200, GAME_HEIGHT / 2);
 
@@ -373,6 +430,7 @@ export class Game {
     this.skyEnemies.reset();
     this.skyEnemies.setDifficulty(1);
     this.enemyShots.clear();
+    this.explosions.clearAll();
     this.pickups.clear();
     this.bullets.clear();
 
@@ -396,6 +454,7 @@ export class Game {
     this.skyEnemies.setDifficulty(3);
     this.skyEnemies.reset();
     this.enemyShots.clear();
+    this.explosions.clearAll();
 
     this.boss.spawn();
     this.boss.visible = true;
@@ -434,6 +493,8 @@ export class Game {
   private onBossDefeated(): void {
     this.score += 2000;
     this.enemyShots.clear();
+    this.explosions.clearAll();
+    this.explosions.spawnExplosion(this.boss.x, this.boss.y);
     this.bossHealthBar.visible = false;
     this.bossHealthLabel.visible = false;
     this.state = GAME_STATE.Victory;
@@ -493,7 +554,13 @@ export class Game {
           const defeated = enemy.takeDamage(bullet.getDamage());
           if (defeated) {
             this.score += 100;
-            this.trySpawnPickup(enemy.x, enemy.y);
+            this.explosions.spawnExplosion(enemy.x, enemy.y - 12);
+            const dropWeapon = enemy.getDropWeapon();
+            if (dropWeapon) {
+              this.pickups.spawn(enemy.x, enemy.y - 12, dropWeapon, { drop: true });
+            } else {
+              this.trySpawnPickup(enemy.x, enemy.y);
+            }
           }
         }
       });
@@ -508,7 +575,8 @@ export class Game {
           const defeated = enemy.takeDamage(bullet.getDamage());
           if (defeated) {
             this.score += 150;
-            this.trySpawnPickup(enemy.x, enemy.y);
+            this.explosions.spawnExplosion(enemy.x, enemy.y);
+            this.pickups.spawn(enemy.x, enemy.y, enemy.getWeaponType(), { drop: true });
           }
         }
       });
@@ -565,6 +633,7 @@ export class Game {
 
     this.player.respawn(120, FLOOR_Y);
     this.enemyShots.clear();
+    this.explosions.clearAll();
     this.pickups.clear();
     this.bullets.clear();
     this.enemies.reset();
@@ -582,6 +651,7 @@ export class Game {
     this.enemies.reset();
     this.skyEnemies.reset();
     this.enemyShots.clear();
+    this.explosions.clearAll();
     this.pickups.clear();
     this.bullets.clear();
     this.stageTimer = 0;

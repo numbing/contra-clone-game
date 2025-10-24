@@ -1,6 +1,15 @@
 import type { BulletSpawn } from './bullet';
 
-export type WeaponType = 'rifle' | 'spread' | 'laser' | 'rapid' | 'flame';
+export type WeaponType =
+  | 'rifle'
+  | 'spread'
+  | 'laser'
+  | 'rapid'
+  | 'flame'
+  | 'goliath'
+  | 'aurora'
+  | 'howler'
+  | 'ion';
 
 interface WeaponDefinition {
   label: string;
@@ -127,6 +136,91 @@ const WEAPONS: Record<WeaponType, WeaponDefinition> = {
           lifetime: 1.4,
           damage: 1,
           pierce: false,
+        }),
+      );
+    },
+  },
+  goliath: {
+    label: 'Goliath',
+    cooldown: 0.28,
+    duration: null,
+    pickupColor: 0x5f96ff,
+    pattern(origin, direction, aimAngle) {
+      const offsets = [-4, 4];
+      return offsets.map((offset) =>
+        makeBullet(
+          { x: origin.x, y: origin.y + offset },
+          direction,
+          aimAngle + offset * 0.01,
+          {
+            speed: 760,
+            color: 0x9ed0ff,
+            width: 14,
+            height: 6,
+            lifetime: 1.4,
+            damage: 2,
+            pierce: true,
+          },
+        ),
+      );
+    },
+  },
+  aurora: {
+    label: 'Aurora',
+    cooldown: 0.26,
+    duration: null,
+    pickupColor: 0xff8bb5,
+    pattern(origin, direction, aimAngle) {
+      const offsets = [-0.35, 0, 0.35];
+      return offsets.map((offset, index) =>
+        makeBullet(origin, direction, aimAngle - offset, {
+          speed: 540 + index * 40,
+          color: 0xffc0e1,
+          width: 8,
+          height: 14,
+          lifetime: 1.3,
+          damage: 1,
+          pierce: false,
+        }),
+      );
+    },
+  },
+  howler: {
+    label: 'Howler',
+    cooldown: 0.3,
+    duration: null,
+    pickupColor: 0xd37c45,
+    pattern(origin, direction) {
+      const angles = [-0.5, -0.2, 0.2];
+      return angles.map((angle, idx) =>
+        makeBullet(origin, direction, angle, {
+          speed: 520 - idx * 60,
+          color: 0xfff18c,
+          width: 10,
+          height: 5,
+          lifetime: 1.2,
+          damage: 1,
+          pierce: false,
+        }),
+      );
+    },
+  },
+  ion: {
+    label: 'Ionheart',
+    cooldown: 0.34,
+    duration: null,
+    pickupColor: 0x6cb5ff,
+    pattern(origin, direction, aimAngle) {
+      const offsets = [-0.25, -0.1, 0.1, 0.25];
+      return offsets.map((offset) =>
+        makeBullet(origin, direction, aimAngle + offset, {
+          speed: 600,
+          color: 0xb5f1ff,
+          width: 8,
+          height: 8,
+          lifetime: 1.5,
+          damage: 1,
+          pierce: true,
         }),
       );
     },

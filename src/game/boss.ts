@@ -1,10 +1,10 @@
-import { Container, Graphics } from 'pixi.js';
+import { Assets, Container, Sprite, Texture } from 'pixi.js';
 import { BOSS_CONFIG, FLOOR_Y, GAME_WIDTH } from './constants';
 import type { EnemyShotSpawn } from './enemyProjectile';
 
 export class Boss extends Container {
-  private readonly hull: Graphics;
-  private readonly core: Graphics;
+  private readonly sprite: Sprite;
+  private readonly coreGlow: Sprite;
   private health: number = Number(BOSS_CONFIG.health);
   private readonly maxHealth: number = Number(BOSS_CONFIG.health);
   private swingTimer = 0;
@@ -16,31 +16,18 @@ export class Boss extends Container {
 
   constructor() {
     super();
-    this.hull = new Graphics();
-    this.core = new Graphics();
-    this.addChild(this.hull, this.core);
+    const tex = Assets.get<Texture>('boss-fortress');
+    this.sprite = new Sprite(tex ?? Texture.WHITE);
+    this.sprite.anchor.set(0.5);
+    this.addChild(this.sprite);
+
+    this.coreGlow = new Sprite(Texture.WHITE);
+    this.coreGlow.tint = BOSS_CONFIG.shotColor;
+    this.coreGlow.alpha = 0.0;
+    this.coreGlow.anchor.set(0.5);
+    this.coreGlow.scale.set(0.4);
+    this.addChild(this.coreGlow);
     this.visible = false;
-    this.drawBody();
-  }
-
-  private drawBody(): void {
-    this.hull
-      .clear()
-      .beginFill(BOSS_CONFIG.colorAccent)
-      .drawRect(-120, -80, 240, 160)
-      .endFill()
-      .beginFill(BOSS_CONFIG.colorPrimary)
-      .drawPolygon([-120, -40, 120, -10, 120, 10, -120, 40])
-      .endFill();
-
-    this.core
-      .clear()
-      .beginFill(0xffffff, 0.9)
-      .drawCircle(0, 0, 22)
-      .endFill()
-      .beginFill(BOSS_CONFIG.colorPrimary)
-      .drawCircle(0, 0, 14)
-      .endFill();
   }
 
   spawn(): void {
@@ -125,9 +112,10 @@ export class Boss extends Container {
     }
 
     this.health -= amount;
-    this.core.scale.set(1.2);
+    this.coreGlow.alpha = 0.65;
+    this.coreGlow.scale.set(0.6);
     setTimeout(() => {
-      this.core.scale.set(1);
+      this.coreGlow.alpha = 0;
     }, 80);
 
     if (!this.enraged && this.health <= this.maxHealth * 0.5) {
@@ -157,11 +145,12 @@ export class Boss extends Container {
   }
 
   getHitBox(): { x: number; y: number; width: number; height: number } {
+    const bounds = this.sprite.getLocalBounds();
     return {
-      x: this.x - 120,
-      y: this.y - 80,
-      width: 240,
-      height: 160,
+      x: this.x - bounds.width / 2,
+      y: this.y - bounds.height / 2,
+      width: bounds.width,
+      height: bounds.height,
     };
   }
 

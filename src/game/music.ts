@@ -105,6 +105,10 @@ export class MusicSystem {
     gain.gain.value = options.volume;
     gain.connect(ctx.destination);
 
+    const drumGain = ctx.createGain();
+    drumGain.gain.value = options.volume * 0.9;
+    drumGain.connect(ctx.destination);
+
     let step = 0;
     const beatDuration = 60 / options.tempo;
     const intervalMs = beatDuration * 1000 * 0.5; // eighth notes
@@ -137,10 +141,77 @@ export class MusicSystem {
       };
     }, intervalMs);
 
+    let beatStep = 0;
+    const drumTimer = window.setInterval(() => {
+      const now = ctx.currentTime;
+      playKick(now);
+      if (beatStep % 2 === 1) {
+        playSnare(now + beatDuration * 0.5);
+      }
+      if (beatStep % 4 === 0) {
+        playHiHat(now + beatDuration * 0.25);
+      }
+      beatStep = (beatStep + 1) % 8;
+    }, beatDuration * 1000);
+
+    const playKick = (time: number) => {
+      const osc = ctx.createOscillator();
+      const gainEnv = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(160, time);
+      osc.frequency.exponentialRampToValueAtTime(50, time + 0.22);
+      gainEnv.gain.setValueAtTime(0.7, time);
+      gainEnv.gain.exponentialRampToValueAtTime(0.001, time + 0.32);
+      osc.connect(gainEnv);
+      gainEnv.connect(drumGain);
+      osc.start(time);
+      osc.stop(time + 0.4);
+    };
+
+    const playSnare = (time: number) => {
+      const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.25, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i += 1) {
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 2);
+      }
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+      const gainEnv = ctx.createGain();
+      gainEnv.gain.setValueAtTime(0.4, time);
+      gainEnv.gain.exponentialRampToValueAtTime(0.001, time + 0.2);
+      noise.connect(gainEnv);
+      gainEnv.connect(drumGain);
+      noise.start(time);
+      noise.stop(time + 0.25);
+    };
+
+    const playHiHat = (time: number) => {
+      const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.1, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i += 1) {
+        data[i] = (Math.random() * 2 - 1) * 0.6;
+      }
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+      const bandpass = ctx.createBiquadFilter();
+      bandpass.type = 'highpass';
+      bandpass.frequency.value = 8000;
+      const gainEnv = ctx.createGain();
+      gainEnv.gain.setValueAtTime(0.25, time);
+      gainEnv.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
+      noise.connect(bandpass);
+      bandpass.connect(gainEnv);
+      gainEnv.connect(drumGain);
+      noise.start(time);
+      noise.stop(time + 0.1);
+    };
+
     return {
       stop: () => {
         window.clearInterval(timer);
+        window.clearInterval(drumTimer);
         gain.disconnect();
+        drumGain.disconnect();
       },
     };
   }
