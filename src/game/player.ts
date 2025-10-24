@@ -121,11 +121,7 @@ export class Player extends Container {
   }
 
   private handleJumping(deltaSeconds: number): void {
-    if (
-      (this.input.isPressed(' ') || this.input.isPressed('arrowup') || this.input.isPressed('w')) &&
-      this.onGround &&
-      !this.isCrouching
-    ) {
+    if (this.input.isPressed(' ') && this.onGround && !this.isCrouching) {
       this.velocityY = -PLAYER_JUMP;
       this.onGround = false;
     }
@@ -156,9 +152,52 @@ export class Player extends Container {
     }
 
     const definition = getWeaponDefinition(this.weaponType);
-    const origin = { x: this.position.x, y: this.position.y - (this.isCrouching ? 10 : 20) };
+    const aimingUp = (this.input.isDown('arrowup') || this.input.isDown('w')) && !this.isCrouching;
+    const aimingDown =
+      (this.input.isDown('arrowdown') || this.input.isDown('s')) && !aimingUp && !this.isCrouching;
+    const aimingLeft = this.input.isDown('arrowleft') || this.input.isDown('a');
+    const aimingRight = this.input.isDown('arrowright') || this.input.isDown('d');
 
-    for (const spawn of definition.pattern(origin, this.facing)) {
+    let aimX = this.facing;
+    let aimY = 0;
+
+    if (aimingUp) {
+      aimY = -1;
+      if (aimingLeft !== aimingRight) {
+        aimX = aimingLeft ? -1 : 1;
+      } else if (Math.abs(this.velocityX) < 1) {
+        aimX = 0;
+      }
+    } else if (aimingDown && !this.onGround) {
+      aimY = 1;
+      if (aimingLeft !== aimingRight) {
+        aimX = aimingLeft ? -1 : 1;
+      } else {
+        aimX = 0;
+      }
+    } else {
+      aimY = 0;
+      aimX = this.facing;
+    }
+
+    if (aimX === 0 && aimY === 0) {
+      aimX = this.facing !== 0 ? this.facing : 1;
+    }
+
+    const magnitude = Math.hypot(aimX, aimY);
+    const normX = magnitude === 0 ? 1 : aimX / magnitude;
+    const normY = magnitude === 0 ? 0 : aimY / magnitude;
+    const direction = normX >= 0 ? 1 : -1;
+    const angle = Math.asin(-normY);
+
+    const muzzleDistance = this.isCrouching ? 16 : 24;
+    const baseHeight = this.isCrouching ? 16 : 24;
+    const origin = {
+      x: this.position.x + direction * Math.cos(angle) * muzzleDistance,
+      y: this.position.y - baseHeight - Math.sin(angle) * muzzleDistance,
+    };
+
+    for (const spawn of definition.pattern(origin, direction, angle)) {
       this.bullets.spawn(spawn);
     }
 

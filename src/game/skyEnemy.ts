@@ -1,75 +1,118 @@
 import { Container, Graphics } from 'pixi.js';
 import {
   GAME_WIDTH,
-  SKY_ENEMY_BASE_HEALTH,
   SKY_ENEMY_MAX_Y,
   SKY_ENEMY_MIN_Y,
-  SKY_ENEMY_SPEED,
   SKY_ENEMY_SPAWN_INTERVAL,
+  SKY_ENEMY_VARIANTS,
 } from './constants';
+import type { EnemyShotSpawn } from './enemyProjectile';
 
-type SkyEnemyMode = 'patrol' | 'static';
+type SkyEnemyVariant = keyof typeof SKY_ENEMY_VARIANTS;
+
+function randomRange(min: number, max: number): number {
+  return min + Math.random() * (max - min);
+}
+
+function randomVariant(): SkyEnemyVariant {
+  return Math.random() < 0.45 ? 'big' : 'small';
+}
 
 export class SkyEnemy extends Container {
   private readonly body: Graphics;
+  private variant: SkyEnemyVariant = 'small';
   private alive = false;
-  private health = SKY_ENEMY_BASE_HEALTH;
-  private maxHealth = SKY_ENEMY_BASE_HEALTH;
-  private id = 0;
-  private mode: SkyEnemyMode = 'patrol';
+  private health = 1;
   private baseY = SKY_ENEMY_MIN_Y;
-  private targetX = GAME_WIDTH - 240;
   private bobTimer = 0;
+  private fireCooldown = 0;
+  private id = 0;
   private static idCounter = 10_000;
 
   constructor() {
     super();
-
-    this.body = new Graphics()
-      .beginFill(0xf069aa)
-      .drawPolygon([-20, -10, 24, 0, -20, 10])
-      .endFill()
-      .beginFill(0x22273b)
-      .drawRect(-14, -4, 16, 8)
-      .endFill();
-
-    this.body.pivot.set(0, 0);
+    this.body = new Graphics();
     this.addChild(this.body);
     this.visible = false;
   }
 
-  reset(x: number, y: number, mode: SkyEnemyMode, targetX?: number): void {
-    this.position.set(x, y);
-    this.baseY = y;
-    this.mode = mode;
-    this.targetX = targetX ?? GAME_WIDTH - 280;
-    this.alive = true;
-    this.visible = true;
-    this.health = this.maxHealth;
-    this.bobTimer = Math.random() * Math.PI * 2;
-    this.id = SkyEnemy.idCounter++;
-    this.body.alpha = 1;
+  private get data() {
+    return SKY_ENEMY_VARIANTS[this.variant];
   }
 
-  update(deltaSeconds: number): void {
+  reset(x: number, y: number, variant: SkyEnemyVariant): void {
+    this.variant = variant;
+    const data = this.data;
+
+    this.position.set(x, y);
+    this.baseY = y;
+    this.health = data.health;
+    this.bobTimer = Math.random() * Math.PI * 2;
+    this.fireCooldown = randomRange(data.fireIntervalMin, data.fireIntervalMax);
+    this.id = SkyEnemy.idCounter++;
+    this.alive = true;
+    this.visible = true;
+
+    this.body.alpha = 1;
+    this.body
+      .clear()
+      .beginFill(data.bodyColor)
+      .drawPolygon([
+        -data.width / 2, -data.height / 2,
+        data.width / 2, 0,
+        -data.width / 2, data.height / 2,
+      ])
+      .endFill()
+      .beginFill(data.accentColor)
+      .drawRect(-data.width / 2 + 6, -4, data.width / 2, 8)
+      .endFill();
+  }
+
+  update(
+    deltaSeconds: number,
+    playerX: number,
+    playerY: number,
+    fire: (spawn: EnemyShotSpawn) => void,
+  ): void {
     if (!this.alive) {
       return;
     }
 
-    this.bobTimer += deltaSeconds * (this.mode === 'patrol' ? 2.6 : 1.8);
+    const data = this.data;
 
-    if (this.mode === 'patrol') {
-      this.position.x -= SKY_ENEMY_SPEED * deltaSeconds;
-      this.position.y = this.baseY + Math.sin(this.bobTimer) * 28;
-    } else {
-      if (this.position.x > this.targetX) {
-        this.position.x = Math.max(this.targetX, this.position.x - SKY_ENEMY_SPEED * deltaSeconds);
-      }
-      this.position.y = this.baseY + Math.sin(this.bobTimer) * 10;
+    this.bobTimer += deltaSeconds * 2.4;
+    this.position.x -= data.speed * deltaSeconds;
+    this.position.y = this.baseY + Math.sin(this.bobTimer) * data.bobAmplitude;
+
+    if (this.position.x < -80) {
+      this.kill();
+      return;
     }
 
-    if (this.position.x < -72) {
-      this.kill();
+    this.fireCooldown -= deltaSeconds;
+    if (this.fireCooldown <= 0 && this.position.x < GAME_WIDTH + 32) {
+      const dx = playerX - this.x;
+      const dy = playerY - this.y;
+      const distance = Math.hypot(dx, dy);
+
+      if (distance > 28 && Math.random() < 0.75) {
+        const speed = data.shotSpeed;
+        const vx = (dx / distance) * speed;
+        const vy = (dy / distance) * speed;
+
+        fire({
+          x: this.x - Math.sign(vx) * 12,
+          y: this.y,
+          vx,
+          vy,
+          lifetime: 3,
+          damage: 1,
+          radius: data.shotRadius,
+          color: data.shotColor,
+        });
+      }
+
+      this.fireCooldown = randomRange(data.fireIntervalMin, data.fireIntervalMax);
     }
   }
 
@@ -101,17 +144,18 @@ export class SkyEnemy extends Container {
     return this.alive;
   }
 
-  getHitBox(): { x: number; y: number; width: number; height: number } {
-    return {
-      x: this.x - 20,
-      y: this.y - 12,
-      width: 40,
-      height: 24,
-    };
-  }
-
   getId(): number {
     return this.id;
+  }
+
+  getHitBox(): { x: number; y: number; width: number; height: number } {
+    const data = this.data;
+    return {
+      x: this.x - data.width / 2,
+      y: this.y - data.height / 2,
+      width: data.width,
+      height: data.height,
+    };
   }
 }
 
@@ -119,17 +163,22 @@ export class SkyEnemyManager extends Container {
   private readonly enemies: SkyEnemy[] = [];
   private spawnTimer = SKY_ENEMY_SPAWN_INTERVAL;
 
-  update(deltaSeconds: number): void {
+  update(
+    deltaSeconds: number,
+    playerX: number,
+    playerY: number,
+    fire: (spawn: EnemyShotSpawn) => void,
+  ): void {
     this.spawnTimer -= deltaSeconds;
 
     if (this.spawnTimer <= 0) {
       this.spawn();
-      this.spawnTimer = SKY_ENEMY_SPAWN_INTERVAL * (0.8 + Math.random() * 0.6);
+      this.spawnTimer = SKY_ENEMY_SPAWN_INTERVAL * (0.7 + Math.random() * 0.8);
     }
 
     for (const enemy of this.enemies) {
       if (enemy.isAlive()) {
-        enemy.update(deltaSeconds);
+        enemy.update(deltaSeconds, playerX, playerY, fire);
       }
     }
   }
@@ -151,10 +200,9 @@ export class SkyEnemyManager extends Container {
 
   private spawn(): void {
     const enemy = this.obtain();
-    const mode: SkyEnemyMode = Math.random() < 0.5 ? 'patrol' : 'static';
+    const variant = randomVariant();
     const y = randomRange(SKY_ENEMY_MIN_Y, SKY_ENEMY_MAX_Y);
-    const targetX = GAME_WIDTH - randomRange(140, 280);
-    enemy.reset(GAME_WIDTH + 64, y, mode, targetX);
+    enemy.reset(GAME_WIDTH + 64, y, variant);
   }
 
   private obtain(): SkyEnemy {
@@ -169,8 +217,4 @@ export class SkyEnemyManager extends Container {
     this.addChild(created);
     return created;
   }
-}
-
-function randomRange(min: number, max: number): number {
-  return min + Math.random() * (max - min);
 }

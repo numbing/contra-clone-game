@@ -6,11 +6,32 @@ interface WeaponDefinition {
   label: string;
   cooldown: number;
   duration: number | null;
-  pattern(origin: { x: number; y: number }, facing: number): BulletSpawn[];
+  pattern(origin: { x: number; y: number }, direction: number, aimAngle: number): BulletSpawn[];
   pickupColor: number;
 }
 
 const DEG_TO_RAD = Math.PI / 180;
+const ANGLE_EPSILON = 0.0001;
+
+function clampAngle(angle: number): number {
+  const limit = Math.PI / 2 - ANGLE_EPSILON;
+  return Math.max(-limit, Math.min(limit, angle));
+}
+
+function makeBullet(
+  origin: { x: number; y: number },
+  direction: number,
+  angle: number,
+  overrides: Omit<BulletSpawn, 'x' | 'y' | 'direction' | 'angle'>,
+): BulletSpawn {
+  return {
+    x: origin.x,
+    y: origin.y,
+    direction: direction === 0 ? 1 : direction,
+    angle: clampAngle(angle),
+    ...overrides,
+  };
+}
 
 const WEAPONS: Record<WeaponType, WeaponDefinition> = {
   rifle: {
@@ -18,21 +39,17 @@ const WEAPONS: Record<WeaponType, WeaponDefinition> = {
     cooldown: 0.18,
     duration: null,
     pickupColor: 0xfcee0c,
-    pattern(origin, facing) {
+    pattern(origin, direction, aimAngle) {
       return [
-        {
-          x: origin.x + facing * 20,
-          y: origin.y,
-          direction: facing,
+        makeBullet(origin, direction, aimAngle, {
           speed: 620,
-          angle: 0,
           color: 0xfcee0c,
           width: 12,
           height: 4,
           lifetime: 1.1,
           damage: 1,
           pierce: false,
-        },
+        }),
       ];
     },
   },
@@ -41,21 +58,17 @@ const WEAPONS: Record<WeaponType, WeaponDefinition> = {
     cooldown: 0.08,
     duration: 15,
     pickupColor: 0x89fffd,
-    pattern(origin, facing) {
+    pattern(origin, direction, aimAngle) {
       return [
-        {
-          x: origin.x + facing * 20,
-          y: origin.y - 2,
-          direction: facing,
+        makeBullet(origin, direction, aimAngle, {
           speed: 720,
-          angle: 0,
           color: 0x89fffd,
           width: 10,
           height: 4,
           lifetime: 1.2,
           damage: 1,
           pierce: false,
-        },
+        }),
       ];
     },
   },
@@ -64,25 +77,19 @@ const WEAPONS: Record<WeaponType, WeaponDefinition> = {
     cooldown: 0.3,
     duration: 18,
     pickupColor: 0xff7b56,
-    pattern(origin, facing) {
-      const angles = [-18, 0, 18];
-      const bullets: BulletSpawn[] = [];
-      for (const angleDeg of angles) {
-        bullets.push({
-          x: origin.x + facing * 20,
-          y: origin.y - 4,
-          direction: facing,
+    pattern(origin, direction, aimAngle) {
+      const offsets = [-18, 0, 18];
+      return offsets.map((offset) =>
+        makeBullet(origin, direction, aimAngle + offset * DEG_TO_RAD, {
           speed: 560,
-          angle: angleDeg * DEG_TO_RAD,
           color: 0xff7b56,
           width: 12,
           height: 5,
           lifetime: 1.2,
           damage: 1,
           pierce: false,
-        });
-      }
-      return bullets;
+        }),
+      );
     },
   },
   laser: {
@@ -90,21 +97,17 @@ const WEAPONS: Record<WeaponType, WeaponDefinition> = {
     cooldown: 0.45,
     duration: 12,
     pickupColor: 0x9b6bff,
-    pattern(origin, facing) {
+    pattern(origin, direction, aimAngle) {
       return [
-        {
-          x: origin.x + facing * 24,
-          y: origin.y - 6,
-          direction: facing,
+        makeBullet(origin, direction, aimAngle, {
           speed: 900,
-          angle: 0,
           color: 0x9b6bff,
           width: 6,
           height: 18,
           lifetime: 1.4,
           damage: 3,
           pierce: true,
-        },
+        }),
       ];
     },
   },

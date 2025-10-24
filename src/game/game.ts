@@ -2,6 +2,7 @@ import { Application, Container, Text } from 'pixi.js';
 import { BulletManager } from './bullet';
 import { FLOOR_Y, GAME_HEIGHT, GAME_WIDTH, PICKUP_DROP_CHANCE } from './constants';
 import { EnemyManager } from './enemy';
+import { EnemyProjectileManager } from './enemyProjectile';
 import { Input } from './input';
 import { Level } from './level';
 import { PickupManager } from './pickup';
@@ -18,6 +19,7 @@ export class Game {
   private readonly enemies: EnemyManager;
   private readonly pickups: PickupManager;
   private readonly skyEnemies: SkyEnemyManager;
+  private readonly enemyShots: EnemyProjectileManager;
   private readonly player: Player;
   private readonly hud: Text;
 
@@ -35,6 +37,7 @@ export class Game {
     this.enemies = new EnemyManager();
     this.skyEnemies = new SkyEnemyManager();
     this.pickups = new PickupManager();
+    this.enemyShots = new EnemyProjectileManager();
     this.player = new Player(this.input, this.bullets);
 
     this.hud = new Text({
@@ -53,6 +56,7 @@ export class Game {
       this.enemies,
       this.skyEnemies,
       this.pickups,
+      this.enemyShots,
       this.player,
       this.bullets,
       this.hud,
@@ -84,8 +88,11 @@ export class Game {
     this.player.update(deltaSeconds);
     this.level.update(deltaSeconds);
     this.enemies.update(deltaSeconds);
-    this.skyEnemies.update(deltaSeconds);
+    this.skyEnemies.update(deltaSeconds, this.player.x, this.player.y - 24, (spawn) => {
+      this.enemyShots.spawn(spawn);
+    });
     this.bullets.update(deltaSeconds);
+    this.enemyShots.update(deltaSeconds);
     this.pickups.update(deltaSeconds);
 
     this.handleCollisions();
@@ -114,17 +121,17 @@ export class Game {
         }
       });
       if (!playerHit) {
-        this.skyEnemies.forEachAlive((enemy) => {
-          if (playerHit) {
-            return;
-          }
-          const enemyBounds = enemy.getHitBox();
-          if (rectsOverlap(playerBounds, enemyBounds)) {
-            this.handlePlayerHit();
-            playerHit = true;
-          }
-        });
-      }
+      this.skyEnemies.forEachAlive((enemy) => {
+        if (playerHit) {
+          return;
+        }
+        const enemyBounds = enemy.getHitBox();
+        if (rectsOverlap(playerBounds, enemyBounds)) {
+          this.handlePlayerHit();
+          playerHit = true;
+        }
+      });
+    }
     }
 
     this.bullets.forEachActive((bullet) => {
@@ -169,6 +176,26 @@ export class Game {
         this.score += 200;
       }
     });
+
+    let shotHitPlayer = false;
+    this.enemyShots.forEachActive((shot) => {
+      if (shotHitPlayer) {
+        return;
+      }
+
+      const shotBounds = shot.getHitBox();
+      if (rectsOverlap(playerBounds, shotBounds)) {
+        shot.deactivate();
+        if (this.invulnerabilityTimer <= 0) {
+          shotHitPlayer = true;
+          this.handlePlayerHit();
+        }
+      }
+    });
+
+    if (shotHitPlayer) {
+      return;
+    }
   }
 
   private handlePlayerHit(): void {
@@ -185,6 +212,7 @@ export class Game {
     this.bullets.clear();
     this.enemies.reset();
     this.skyEnemies.reset();
+    this.enemyShots.clear();
     this.pickups.clear();
   }
 
@@ -196,6 +224,7 @@ export class Game {
     this.bullets.clear();
     this.enemies.reset();
     this.skyEnemies.reset();
+    this.enemyShots.clear();
     this.pickups.clear();
   }
 
