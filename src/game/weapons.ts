@@ -9,7 +9,9 @@ export type WeaponType =
   | 'goliath'
   | 'aurora'
   | 'howler'
-  | 'ion';
+  | 'ion'
+  | 'thunder'
+  | 'vortex';
 
 interface WeaponDefinition {
   label: string;
@@ -221,6 +223,46 @@ const WEAPONS: Record<WeaponType, WeaponDefinition> = {
           lifetime: 1.5,
           damage: 1,
           pierce: true,
+        }),
+      );
+    },
+  },
+  thunder: {
+    label: 'Thunder',
+    cooldown: 0.26,
+    duration: null,
+    pickupColor: 0xffc04d,
+    pattern(origin, direction, aimAngle) {
+      const offsets = [-0.1, 0.1];
+      return offsets.map((offset) =>
+        makeBullet(origin, direction, aimAngle + offset, {
+          speed: 650,
+          color: 0xffe08c,
+          width: 14,
+          height: 6,
+          lifetime: 1.6,
+          damage: 2,
+          pierce: true,
+        }),
+      );
+    },
+  },
+  vortex: {
+    label: 'Vortex',
+    cooldown: 0.32,
+    duration: null,
+    pickupColor: 0x8df1ff,
+    pattern(origin, direction, aimAngle) {
+      const offsets = [-0.4, -0.2, 0, 0.2, 0.4];
+      return offsets.map((offset, index) =>
+        makeBullet(origin, direction, aimAngle + offset, {
+          speed: 500 + index * 30,
+          color: 0x4ad3ff,
+          width: 10,
+          height: 10,
+          lifetime: 1.4,
+          damage: 1,
+          pierce: false,
         }),
       );
     },

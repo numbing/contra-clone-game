@@ -184,6 +184,7 @@ export class EnemyManager extends Container {
   private spawnTimer = 0;
   private active = true;
   private difficultyTier = 1;
+  private customPool: GroundEnemyVariantId[] | null = null;
 
   constructor() {
     super();
@@ -195,6 +196,10 @@ export class EnemyManager extends Container {
 
   setDifficulty(tier: number): void {
     this.difficultyTier = Math.min(3, Math.max(1, Math.round(tier)));
+  }
+
+  setVariantPool(pool: GroundEnemyVariantId[]): void {
+    this.customPool = pool.length ? [...pool] : null;
   }
 
   update(
@@ -235,7 +240,9 @@ export class EnemyManager extends Container {
   }
 
   private spawn(): void {
-    const pool = DIFFICULTY_TABLE[this.difficultyTier] ?? DIFFICULTY_TABLE[1];
+    const pool = this.customPool && this.customPool.length > 0
+      ? this.customPool
+      : DIFFICULTY_TABLE[this.difficultyTier] ?? DIFFICULTY_TABLE[1];
     const variant = pool[Math.floor(Math.random() * pool.length)];
     const enemy = this.obtain();
     enemy.reset(GAME_WIDTH + 32, FLOOR_Y - 16, variant);

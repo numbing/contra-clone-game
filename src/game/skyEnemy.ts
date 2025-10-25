@@ -166,6 +166,7 @@ export class SkyEnemyManager extends Container {
   private readonly enemies: SkyEnemy[] = [];
   private spawnTimer = SKY_ENEMY_SPAWN_INTERVAL;
   private difficultyTier = 1;
+  private customPool: SkyEnemyVariantId[] | null = null;
 
   update(
     deltaSeconds: number,
@@ -199,6 +200,10 @@ export class SkyEnemyManager extends Container {
     this.difficultyTier = Math.min(3, Math.max(1, Math.round(tier)));
   }
 
+  setVariantPool(pool: SkyEnemyVariantId[]): void {
+    this.customPool = pool.length ? [...pool] : null;
+  }
+
   reset(): void {
     this.spawnTimer = SKY_ENEMY_SPAWN_INTERVAL;
     for (const enemy of this.enemies) {
@@ -227,7 +232,9 @@ export class SkyEnemyManager extends Container {
   }
 
   private pickVariant(): SkyEnemyVariantId {
-    const pool = SKY_VARIANT_TABLE[this.difficultyTier] ?? SKY_VARIANT_TABLE[1];
+    const pool = this.customPool && this.customPool.length > 0
+      ? this.customPool
+      : SKY_VARIANT_TABLE[this.difficultyTier] ?? SKY_VARIANT_TABLE[1];
     return pool[Math.floor(Math.random() * pool.length)];
   }
 }

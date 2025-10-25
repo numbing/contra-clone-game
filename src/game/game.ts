@@ -6,6 +6,11 @@ import {
   GAME_HEIGHT,
   GAME_WIDTH,
   PICKUP_DROP_CHANCE,
+  type LevelThemeId,
+  type GroundEnemyVariantId,
+  type SkyEnemyVariantId,
+  BOSS_PROFILES,
+  type BossProfileId,
 } from './constants';
 import { EnemyManager } from './enemy';
 import { EnemyProjectileManager } from './enemyProjectile';
@@ -14,10 +19,10 @@ import { Level } from './level';
 import { PickupManager } from './pickup';
 import { Player } from './player';
 import { getRandomWeapon, getWeaponLabel } from './weapons';
+import type { WeaponType } from './weapons';
 import { SkyEnemyManager } from './skyEnemy';
 import { CHARACTERS, type CharacterDefinition } from './characters';
 import { Boss } from './boss';
-import { MusicSystem } from './music';
 import { ExplosionManager } from './effects';
 
 const GAME_STATE = {
@@ -25,11 +30,12 @@ const GAME_STATE = {
   Playing: 'playing',
   BossFight: 'boss-fight',
   Victory: 'victory',
+  LevelTransition: 'level-transition',
 } as const;
 
 type GameState = (typeof GAME_STATE)[keyof typeof GAME_STATE];
 
-const BOSS_TRIGGER_TIME = 72;
+const BOSS_TRIGGER_TIME = 22;
 
 const ASSET_MANIFEST = {
   bundles: [
@@ -44,9 +50,15 @@ const ASSET_MANIFEST = {
         { alias: 'enemy-gunner', src: 'assets/enemies/gunner.png' },
         { alias: 'enemy-grenadier', src: 'assets/enemies/grenadier.png' },
         { alias: 'enemy-brute', src: 'assets/enemies/brute.png' },
+        { alias: 'enemy-raider', src: 'assets/enemies/raider.png' },
+        { alias: 'enemy-shredder', src: 'assets/enemies/shredder.png' },
+        { alias: 'enemy-pyro', src: 'assets/enemies/pyro.png' },
         { alias: 'sky-small', src: 'assets/sky/small.png' },
         { alias: 'sky-big', src: 'assets/sky/big.png' },
+        { alias: 'sky-ace', src: 'assets/sky/ace.png' },
+        { alias: 'sky-behemoth', src: 'assets/sky/behemoth.png' },
         { alias: 'boss-fortress', src: 'assets/boss/fortress_core.png' },
+        { alias: 'boss-warlord', src: 'assets/boss/warlord_core.png' },
         { alias: 'weapon-rifle', src: 'assets/weapons/rifle.png' },
         { alias: 'weapon-rapid', src: 'assets/weapons/rapid.png' },
         { alias: 'weapon-spread', src: 'assets/weapons/spread.png' },
@@ -56,6 +68,8 @@ const ASSET_MANIFEST = {
         { alias: 'weapon-aurora', src: 'assets/weapons/aurora.png' },
         { alias: 'weapon-howler', src: 'assets/weapons/howler.png' },
         { alias: 'weapon-ion', src: 'assets/weapons/ion.png' },
+        { alias: 'weapon-thunder', src: 'assets/weapons/thunder.png' },
+        { alias: 'weapon-vortex', src: 'assets/weapons/vortex.png' },
         { alias: 'explosion-0', src: 'assets/effects/explosion_0.png' },
         { alias: 'explosion-1', src: 'assets/effects/explosion_1.png' },
         { alias: 'explosion-2', src: 'assets/effects/explosion_2.png' },
@@ -64,6 +78,34 @@ const ASSET_MANIFEST = {
     },
   ],
 };
+
+interface LevelConfig {
+  id: string;
+  themeSequence: LevelThemeId[];
+  groundVariants: GroundEnemyVariantId[];
+  skyVariants: SkyEnemyVariantId[];
+  dropPool: WeaponType[];
+  bossProfile: BossProfileId;
+}
+
+const LEVEL_CONFIGS: LevelConfig[] = [
+  {
+    id: 'jungle',
+    themeSequence: ['jungleDawn', 'jungleDusk', 'fortress'],
+    groundVariants: ['scout', 'gunner', 'grenadier', 'brute'],
+    skyVariants: ['small', 'big'],
+    dropPool: ['spread', 'rapid', 'laser', 'flame'],
+    bossProfile: 'fortress',
+  },
+  {
+    id: 'cinder',
+    themeSequence: ['cinderDawn', 'cinderStorm', 'cinderNight'],
+    groundVariants: ['raider', 'shredder', 'pyro'],
+    skyVariants: ['ace', 'behemoth'],
+    dropPool: ['thunder', 'vortex', 'ion', 'aurora'],
+    bossProfile: 'warlord',
+  },
+];
 
 export class Game {
   private readonly app: Application;
@@ -87,7 +129,6 @@ export class Game {
   private readonly victoryText: Text;
   private readonly bossHealthBar: Graphics;
   private readonly bossHealthLabel: Text;
-  private readonly music = new MusicSystem();
 
   private state: GameState = GAME_STATE.CharacterSelect;
   private selectedCharacterIndex = 0;
@@ -96,6 +137,11 @@ export class Game {
   private invulnerabilityTimer = 0;
   private stageTimer = 0;
   private backgroundPhase = 0;
+  private lifeBoostsAwarded = 0;
+  private currentLevelIndex = 0;
+  private currentLevelConfig: LevelConfig = LEVEL_CONFIGS[0];
+  private currentDropPool: WeaponType[] = [...LEVEL_CONFIGS[0].dropPool];
+  private pendingLevelIndex: number | null = null;
 
   private constructor(app: Application) {
     this.app = app;
@@ -151,6 +197,9 @@ export class Game {
     this.victoryText.anchor.set(0.5);
     this.victoryText.position.set(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 40);
     this.victoryText.visible = false;
+    this.victoryText.eventMode = 'static';
+    this.victoryText.cursor = 'pointer';
+    this.victoryText.on('pointertap', () => this.handleVictoryPointer());
     this.overlay.addChild(this.victoryText);
 
     this.bossHealthBar = new Graphics();
@@ -188,7 +237,6 @@ export class Game {
     this.player.visible = false;
     this.boss.visible = false;
 
-    void this.music.play('menu');
     this.enterCharacterSelect();
 
     this.app.ticker.add((ticker) => {
@@ -287,6 +335,13 @@ export class Game {
       }
 
       card.position.set(160 + index * 200, GAME_HEIGHT / 2);
+      card.eventMode = 'static';
+      card.cursor = 'pointer';
+      card.on('pointertap', () => {
+        this.selectedCharacterIndex = index;
+        this.updateCharacterCardHighlight();
+        this.startLevelPlay(character);
+      });
 
       this.selectionContainer.addChild(card);
       this.selectionCards.push(card);
@@ -304,6 +359,10 @@ export class Game {
         this.input.update();
         return;
       case GAME_STATE.Victory:
+        this.updateVictoryScreen();
+        this.input.update();
+        return;
+      case GAME_STATE.LevelTransition:
         this.updateVictoryScreen();
         this.input.update();
         return;
@@ -331,13 +390,13 @@ export class Game {
       if (this.input.isPressed(key)) {
         this.selectedCharacterIndex = i;
         this.updateCharacterCardHighlight();
-        this.startStage(CHARACTERS[i]);
+        this.startLevelPlay(CHARACTERS[i]);
         return;
       }
     }
 
     if (this.input.isPressed('enter') || this.input.isPressed(' ')) {
-      this.startStage(CHARACTERS[this.selectedCharacterIndex]);
+      this.startLevelPlay(CHARACTERS[this.selectedCharacterIndex]);
     }
   }
 
@@ -352,18 +411,22 @@ export class Game {
   private updateGameplay(deltaSeconds: number): void {
     this.player.update(deltaSeconds);
     this.level.update(deltaSeconds);
-    this.enemies.update(
-      deltaSeconds,
-      this.player.x,
-      this.player.y - 24,
-      (spawn) => this.enemyShots.spawn(spawn),
-    );
-    this.skyEnemies.update(
-      deltaSeconds,
-      this.player.x,
-      this.player.y - 30,
-      (spawn) => this.enemyShots.spawn(spawn),
-    );
+    const bossActive = this.state === GAME_STATE.BossFight && this.boss.isActive();
+
+    if (!bossActive) {
+      this.enemies.update(
+        deltaSeconds,
+        this.player.x,
+        this.player.y - 24,
+        (spawn) => this.enemyShots.spawn(spawn),
+      );
+      this.skyEnemies.update(
+        deltaSeconds,
+        this.player.x,
+        this.player.y - 30,
+        (spawn) => this.enemyShots.spawn(spawn),
+      );
+    }
     this.bullets.update(deltaSeconds);
     this.enemyShots.update(deltaSeconds);
     this.pickups.update(deltaSeconds);
@@ -386,17 +449,16 @@ export class Game {
 
     if (this.state === GAME_STATE.Playing) {
       this.stageTimer += deltaSeconds;
-      if (this.backgroundPhase === 0 && this.stageTimer > BACKGROUND_SWITCH_TIME) {
-        this.backgroundPhase = 1;
-        this.level.setTheme('jungleDusk');
-        this.enemies.setDifficulty(2);
-        this.skyEnemies.setDifficulty(2);
-      }
-
-      if (this.backgroundPhase === 1 && this.stageTimer > BACKGROUND_SWITCH_TIME * 1.6) {
-        this.backgroundPhase = 2;
-        this.enemies.setDifficulty(3);
-        this.skyEnemies.setDifficulty(3);
+      const themeSequence = this.currentLevelConfig.themeSequence;
+      if (this.backgroundPhase < themeSequence.length - 1) {
+        const threshold = BACKGROUND_SWITCH_TIME * (this.backgroundPhase + 1);
+        if (this.stageTimer > threshold) {
+          this.backgroundPhase += 1;
+          const nextTheme = themeSequence[this.backgroundPhase];
+          this.level.setTheme(nextTheme as LevelThemeId);
+          this.enemies.setDifficulty(Math.min(3, this.backgroundPhase + 1));
+          this.skyEnemies.setDifficulty(Math.min(3, this.backgroundPhase + 1));
+        }
       }
 
       if (this.stageTimer > BOSS_TRIGGER_TIME) {
@@ -406,12 +468,27 @@ export class Game {
   }
 
   private updateVictoryScreen(): void {
-    if (this.input.isPressed('enter') || this.input.isPressed(' ')) {
-      this.enterCharacterSelect();
+    if (this.state === GAME_STATE.LevelTransition) {
+      if (this.pendingLevelIndex !== null && (this.input.isPressed('enter') || this.input.isPressed(' '))) {
+        this.beginLevel(this.pendingLevelIndex, { keepStats: true });
+      }
+    } else if (this.state === GAME_STATE.Victory) {
+      if (this.input.isPressed('enter') || this.input.isPressed(' ')) {
+        this.enterCharacterSelect();
+      }
     }
   }
 
-  private startStage(character: CharacterDefinition): void {
+  private startLevelPlay(character: CharacterDefinition): void {
+    this.player.applyCharacter(character);
+    this.beginLevel(0, { keepStats: false });
+  }
+
+  private beginLevel(levelIndex: number, options?: { keepStats?: boolean }): void {
+    const keepStats = options?.keepStats ?? false;
+    this.currentLevelIndex = levelIndex;
+    this.currentLevelConfig = LEVEL_CONFIGS[levelIndex];
+    this.currentDropPool = [...this.currentLevelConfig.dropPool];
     this.selectionContainer.visible = false;
     this.victoryText.visible = false;
     this.bossHealthBar.visible = false;
@@ -419,50 +496,56 @@ export class Game {
     this.state = GAME_STATE.Playing;
     this.stageTimer = 0;
     this.backgroundPhase = 0;
-    this.score = 0;
-    this.lives = 3;
+    this.lifeBoostsAwarded = 0;
+    this.pendingLevelIndex = null;
+    if (!keepStats) {
+      this.score = 0;
+      this.lives = 3;
+    }
     this.invulnerabilityTimer = 1;
 
-    this.level.setTheme('jungleDawn');
-    this.enemies.reset();
+    const initialTheme = this.currentLevelConfig.themeSequence[0];
+    this.level.setTheme(initialTheme);
+    this.enemies.setVariantPool(this.currentLevelConfig.groundVariants);
     this.enemies.setActive(true);
     this.enemies.setDifficulty(1);
-    this.skyEnemies.reset();
+    this.enemies.reset();
+    this.skyEnemies.setVariantPool(this.currentLevelConfig.skyVariants);
     this.skyEnemies.setDifficulty(1);
+    this.skyEnemies.reset();
     this.enemyShots.clear();
     this.explosions.clearAll();
     this.pickups.clear();
     this.bullets.clear();
 
-    this.player.applyCharacter(character);
     this.player.respawn(120, FLOOR_Y);
     this.player.visible = true;
 
     this.boss.visible = false;
     this.bossHealthBar.clear();
     this.bossHealthLabel.text = '';
-
-    void this.music.play('stage');
   }
 
   private startBossFight(): void {
     this.state = GAME_STATE.BossFight;
     this.backgroundPhase = 3;
-    this.level.setTheme('fortress');
+    const finalTheme = this.currentLevelConfig.themeSequence.at(-1);
+    if (finalTheme) {
+      this.level.setTheme(finalTheme as LevelThemeId);
+    }
     this.enemies.setActive(false);
     this.enemies.reset();
-    this.skyEnemies.setDifficulty(3);
     this.skyEnemies.reset();
     this.enemyShots.clear();
     this.explosions.clearAll();
 
-    this.boss.spawn();
+    const profile = BOSS_PROFILES[this.currentLevelConfig.bossProfile];
+    this.boss.spawn(profile);
     this.boss.visible = true;
     this.updateBossHud();
     this.bossHealthBar.visible = true;
     this.bossHealthLabel.visible = true;
 
-    void this.music.play('boss');
   }
 
   private updateBossHud(): void {
@@ -497,10 +580,17 @@ export class Game {
     this.explosions.spawnExplosion(this.boss.x, this.boss.y);
     this.bossHealthBar.visible = false;
     this.bossHealthLabel.visible = false;
-    this.state = GAME_STATE.Victory;
-    this.victoryText.visible = true;
-    this.victoryText.text = 'MISSION COMPLETE!\nPRESS ENTER TO DEBRIEF';
-    void this.music.play('victory');
+
+    if (this.currentLevelIndex < LEVEL_CONFIGS.length - 1) {
+      this.state = GAME_STATE.LevelTransition;
+      this.pendingLevelIndex = this.currentLevelIndex + 1;
+      this.victoryText.visible = true;
+      this.victoryText.text = `Sector ${this.currentLevelIndex + 1} cleared!\\nTap or press Enter to deploy to Level ${this.currentLevelIndex + 2}.`;
+    } else {
+      this.state = GAME_STATE.Victory;
+      this.victoryText.visible = true;
+      this.victoryText.text = 'CONGRATULATIONS!\\nYOU KILLED THE BOSS';
+    }
   }
 
   private handleCollisions(): void {
@@ -555,12 +645,8 @@ export class Game {
           if (defeated) {
             this.score += 100;
             this.explosions.spawnExplosion(enemy.x, enemy.y - 12);
-            const dropWeapon = enemy.getDropWeapon();
-            if (dropWeapon) {
-              this.pickups.spawn(enemy.x, enemy.y - 12, dropWeapon, { drop: true });
-            } else {
-              this.trySpawnPickup(enemy.x, enemy.y);
-            }
+            this.maybeDropWeapon(enemy.x, enemy.y - 12, enemy.getDropWeapon());
+            this.maybeAwardLife();
           }
         }
       });
@@ -576,7 +662,8 @@ export class Game {
           if (defeated) {
             this.score += 150;
             this.explosions.spawnExplosion(enemy.x, enemy.y);
-            this.pickups.spawn(enemy.x, enemy.y, enemy.getWeaponType(), { drop: true });
+            this.maybeDropWeapon(enemy.x, enemy.y, enemy.getWeaponType());
+            this.maybeAwardLife();
           }
         }
       });
@@ -658,9 +745,12 @@ export class Game {
     this.backgroundPhase = 0;
     this.score = 0;
     this.lives = 3;
-    this.level.setTheme('jungleDawn');
+    this.lifeBoostsAwarded = 0;
+    this.currentLevelIndex = 0;
+    this.currentLevelConfig = LEVEL_CONFIGS[0];
+    this.currentDropPool = [...LEVEL_CONFIGS[0].dropPool];
+    this.level.setTheme(this.currentLevelConfig.themeSequence[0]);
     this.boss.visible = false;
-    void this.music.play('menu');
     this.updateHud();
     this.updateCharacterCardHighlight();
   }
@@ -680,13 +770,33 @@ export class Game {
     ].join('    ');
   }
 
-  private trySpawnPickup(x: number, y: number): void {
+  private maybeDropWeapon(x: number, y: number, preferred?: WeaponType | null): void {
     if (Math.random() > PICKUP_DROP_CHANCE) {
       return;
     }
+    const pool = this.currentDropPool.length ? this.currentDropPool : LEVEL_CONFIGS[0].dropPool;
+    const randomWeapon = pool[Math.floor(Math.random() * pool.length)] ?? getRandomWeapon();
+    const weapon = preferred ?? randomWeapon;
+    this.pickups.spawn(x, y, weapon, { drop: true });
+  }
 
-    const weapon = getRandomWeapon();
-    this.pickups.spawn(x, y, weapon);
+  private maybeAwardLife(): void {
+    if (this.lifeBoostsAwarded >= 2) {
+      return;
+    }
+    if (Math.random() < 0.25) {
+      this.lifeBoostsAwarded += 1;
+      this.lives = Math.min(this.lives + 1, 9);
+      this.updateHud();
+    }
+  }
+
+  private handleVictoryPointer(): void {
+    if (this.state === GAME_STATE.LevelTransition && this.pendingLevelIndex !== null) {
+      this.beginLevel(this.pendingLevelIndex, { keepStats: true });
+    } else if (this.state === GAME_STATE.Victory) {
+      this.enterCharacterSelect();
+    }
   }
 }
 

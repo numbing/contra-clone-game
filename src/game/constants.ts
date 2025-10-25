@@ -39,6 +39,27 @@ export const LEVEL_THEMES = {
     accent: 0x485062,
     decoration: 0x2e3646,
   },
+  cinderDawn: {
+    sky: 0x2b1b14,
+    horizon: 0x5a3021,
+    ground: 0x3a261b,
+    accent: 0xd97329,
+    decoration: 0x5b3d2c,
+  },
+  cinderStorm: {
+    sky: 0x1a1e2f,
+    horizon: 0x39445b,
+    ground: 0x242631,
+    accent: 0x8fa1c2,
+    decoration: 0x444f68,
+  },
+  cinderNight: {
+    sky: 0x08090d,
+    horizon: 0x3a1c32,
+    ground: 0x1c1118,
+    accent: 0xdb4c72,
+    decoration: 0x552238,
+  },
 } as const;
 
 export type LevelThemeId = keyof typeof LEVEL_THEMES;
@@ -73,6 +94,36 @@ export const SKY_ENEMY_VARIANTS = {
     width: 44,
     height: 26,
     weapon: 'laser' as WeaponType,
+  },
+  ace: {
+    speed: 190,
+    health: 3,
+    bodyColor: 0xffdd7a,
+    accentColor: 0x5c3f0f,
+    bobAmplitude: 22,
+    shotColor: 0xffb347,
+    fireIntervalMin: 1.6,
+    fireIntervalMax: 2.4,
+    shotSpeed: 360,
+    shotRadius: 5,
+    width: 48,
+    height: 22,
+    weapon: 'aurora' as WeaponType,
+  },
+  behemoth: {
+    speed: 120,
+    health: 6,
+    bodyColor: 0x6fb0ff,
+    accentColor: 0x1f3c68,
+    bobAmplitude: 32,
+    shotColor: 0xbfe4ff,
+    fireIntervalMin: 1.4,
+    fireIntervalMax: 2.2,
+    shotSpeed: 280,
+    shotRadius: 8,
+    width: 64,
+    height: 32,
+    weapon: 'ion' as WeaponType,
   },
 } as const;
 
@@ -119,21 +170,78 @@ export const GROUND_ENEMY_VARIANTS = {
     bulletSpeed: 0,
     dropWeapon: null,
   },
+  raider: {
+    speed: 200,
+    health: 3,
+    color: 0xffc04d,
+    stripe: 0x8a4f06,
+    ability: 'dash',
+    fireInterval: 0,
+    bulletSpeed: 0,
+    dropWeapon: 'thunder' as WeaponType,
+  },
+  shredder: {
+    speed: 140,
+    health: 4,
+    color: 0x8df1ff,
+    stripe: 0x2c8ea1,
+    ability: 'shoot',
+    fireInterval: 2.4,
+    bulletSpeed: 320,
+    dropWeapon: 'vortex' as WeaponType,
+  },
+  pyro: {
+    speed: 110,
+    health: 5,
+    color: 0xff7b4d,
+    stripe: 0x91240f,
+    ability: 'lob',
+    fireInterval: 3,
+    bulletSpeed: 260,
+    dropWeapon: 'flame' as WeaponType,
+  },
 } as const;
 
 export type GroundEnemyVariantId = keyof typeof GROUND_ENEMY_VARIANTS;
 
-export const PICKUP_DROP_CHANCE = 0.32;
+export const PICKUP_DROP_CHANCE = 0.1;
 export const PICKUP_SPEED = 80;
 export const PICKUP_LIFETIME = 12;
 
 export const BACKGROUND_SWITCH_TIME = 38;
 
-export const BOSS_CONFIG = {
-  health: 160,
-  colorPrimary: 0xff4159,
-  colorAccent: 0x1b1c3a,
-  shotColor: 0xffd34d,
-  shotSpeed: 360,
-  slamInterval: 4.8,
+export interface BossProfile {
+  id: string;
+  textureAlias: string;
+  health: number;
+  colorPrimary: number;
+  colorAccent: number;
+  shotColor: number;
+  shotSpeed: number;
+  slamInterval: number;
+}
+
+export const BOSS_PROFILES = {
+  fortress: {
+    id: 'fortress',
+    textureAlias: 'boss-fortress',
+    health: 160,
+    colorPrimary: 0xff4159,
+    colorAccent: 0x1b1c3a,
+    shotColor: 0xffd34d,
+    shotSpeed: 360,
+    slamInterval: 4.8,
+  },
+  warlord: {
+    id: 'warlord',
+    textureAlias: 'boss-warlord',
+    health: 220,
+    colorPrimary: 0xff7e2b,
+    colorAccent: 0x2a1a1d,
+    shotColor: 0xfff6a0,
+    shotSpeed: 420,
+    slamInterval: 3.8,
+  },
 } as const;
+
+export type BossProfileId = keyof typeof BOSS_PROFILES;
